@@ -49,28 +49,31 @@ class AuthHelper
 
         $sharedSecret = ShopifySDK::$config['SharedSecret'];
 
-        //Get the hmac and remove it from array
-        if (isset($data['hmac'])) {
-            $hmac = $data['hmac'];
-            unset($data['hmac']);
-        } else {
+        if(!is_array($data) || empty($data['hmac']) || !is_string($data['hmac'])){
             throw new SdkException("HMAC value not found in url parameters.");
         }
-        //signature validation is deprecated
-        if (isset($data['signature'])) {
-            unset($data['signature']);
-        }
-        //Create data string for the remaining url parameters
-        $dataString = http_build_query($data);
 
-        $realHmac = hash_hmac('sha256', $dataString, $sharedSecret);
-
-        //hash the values before comparing (to prevent time attack)
-        if(md5($realHmac) === md5($hmac)) {
-            return true;
-        } else {
-            return false;
+        $dataString = array();
+        foreach ($data as $key => $value) {
+            $key = str_replace('=', '%3D', $key);
+            $key = str_replace('&', '%26', $key);
+            $key = str_replace('%', '%25', $key);
+            $value = str_replace('&', '%26', $value);
+            $value = str_replace('%', '%25', $value);
+            
+            if($key != 'hmac')
+                $dataString[] = $key . '=' . $value;
         }
+         
+        sort($dataString);
+        
+        $string = implode("&", $dataString);
+        if (version_compare(PHP_VERSION, '5.3.0', '>='))
+            $signature = hash_hmac('sha256', $string, $sharedSecret);
+        else
+            $signature = bin2hex(mhash(MHASH_SHA256, $string, $sharedSecret));
+                
+        return $data['hmac'] == $signature;
     }
 
     /**
